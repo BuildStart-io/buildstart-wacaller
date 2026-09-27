@@ -1,0 +1,11 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect "#"
+send {docker exec waha-plus-waha-1 curl -X PUT -H 'Content-Type: application/json' -H 'X-Api-Key: 9fe5a6231e7c444ca63bde0b3ba966ee' -d '{"config": {"webhooks": [{"url": "https://supabase.buildstart.io/functions/v1/webhook-wsender", "events": ["message", "session.status"], "retries": {"policy": "linear", "delaySeconds": 2, "attempts": 3}}]}}' http://localhost:3000/api/sessions/u_a57d1ce6ad3840e8a381}
+send "\r"
+expect "#"
+send "exit\r"
+expect eof

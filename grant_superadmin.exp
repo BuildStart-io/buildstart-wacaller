@@ -1,0 +1,10 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect "#"
+send "docker exec supabase-db psql -U postgres -d postgres -c \"INSERT INTO public.user_roles (user_id, role) VALUES ('07cbe103-5afe-4853-b651-b2b6c0730d1e', 'super_admin') ON CONFLICT (user_id, role) DO NOTHING;\"\r"
+expect "#"
+send "exit\r"
+expect eof

@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "docker exec -i supabase-db psql -U postgres -d postgres -c \"SELECT trigger_name, event_object_schema, action_statement FROM information_schema.triggers WHERE event_object_table = 'users' AND event_object_schema = 'auth';\""
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect eof

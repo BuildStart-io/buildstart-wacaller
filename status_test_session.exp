@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set timeout 15
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "curl -s -X GET http://localhost:3000/api/sessions/test_session_123 -H 'X-Api-Key: 9fe5a6231e7c444ca63bde0b3ba966ee'"
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect eof

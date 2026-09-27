@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 60
+
+spawn scp -o StrictHostKeyChecking=no /home/anuhas/programming/Capsulehouse-Customization/supabase/functions/media-storage-capsulehouse/index.ts root@178.104.127.220:/root/supabase/supabase/docker/volumes/functions/media-storage-capsulehouse/index.ts
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect eof
+
+spawn scp -o StrictHostKeyChecking=no /home/anuhas/programming/happypetal-customization/supabase/functions/media-storage-happypetal/index.ts root@178.104.127.220:/root/supabase/supabase/docker/volumes/functions/media-storage-happypetal/index.ts
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect eof

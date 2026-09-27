@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect "#"
+send "echo 'WEBHOOK_URL_OVERRIDE=\"https://supabase.buildstart.io/functions/v1/webhook-wsender\"' >> /root/supabase/supabase/docker/.env\r"
+expect "#"
+send "cd /root/supabase/supabase/docker && docker compose -f docker-compose.yml -f docker-compose.override.yml up -d\r"
+expect "#"
+send "exit\r"
+expect eof

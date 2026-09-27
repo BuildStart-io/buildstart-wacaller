@@ -1,0 +1,10 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220
+expect "password:"
+send "voibVmIdk9DqPMmZ\r"
+expect "#"
+send "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT id FROM auth.users WHERE email = 'superadmin@buildstart.io';\"\r"
+expect "#"
+send "exit\r"
+expect eof
