@@ -1,6 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 10
-spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "ls -l /root/supabase/supabase/volumes/functions/"
-expect "password:"
-send "voibVmIdk9DqPMmZ\r"
-expect eof

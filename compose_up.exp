@@ -1,6 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 60
-spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "cd /root/supabase/supabase/docker && docker compose up -d"
-expect "password:"
-send "voibVmIdk9DqPMmZ\r"
-expect eof

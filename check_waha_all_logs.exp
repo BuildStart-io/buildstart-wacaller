@@ -1,6 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 15
-spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "docker logs waha-plus-waha-1 2>&1 | grep u_b9cb061bd402448ead1c | tail -n 20"
-expect "password:"
-send "voibVmIdk9DqPMmZ\r"
-expect eof

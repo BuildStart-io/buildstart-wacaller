@@ -1,6 +1,0 @@
-#!/usr/bin/expect -f
-set timeout 60
-spawn ssh -o StrictHostKeyChecking=no root@178.104.127.220 "cd /root/supabase/supabase/docker && sed -i '/VERIFY_JWT/a \\      MINIO_ENDPOINT: \\${MINIO_ENDPOINT}\\n      MINIO_ACCESS_KEY: \\${MINIO_ACCESS_KEY}\\n      MINIO_SECRET_KEY: \\${MINIO_SECRET_KEY}\\n      MINIO_REGION: \\${MINIO_REGION}' docker-compose.yml && docker compose up -d supabase-edge-functions"
-expect "password:"
-send "voibVmIdk9DqPMmZ\r"
-expect eof
