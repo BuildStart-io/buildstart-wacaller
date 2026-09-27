@@ -12,6 +12,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  db: { schema: 'wacaller_customization' },
   auth: {
     storage: localStorage,
     persistSession: true,
