@@ -116,7 +116,7 @@ export default function BroadcastManager() {
     if (!user) return;
     setLoadingAudience(true);
     try {
-      const { data, error } = await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      const { data, error } = await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "get_audience_counts", segment: targetSegment, user_id: user.id },
       });
 
@@ -137,7 +137,7 @@ export default function BroadcastManager() {
     if (!user) return;
     setHistoryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      const { data, error } = await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "list_campaigns", user_id: user.id },
       });
       if (error) throw error;
@@ -161,7 +161,7 @@ export default function BroadcastManager() {
 
   const fetchCampaignDetails = async (campaignId: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      const { data, error } = await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "get_campaign_status", campaign_id: campaignId, user_id: user?.id },
       });
       if (error) throw error;
@@ -260,7 +260,7 @@ export default function BroadcastManager() {
     setLoadingAudience(true);
     try {
       const name = campaignName.trim() || `Broadcast - ${new Date().toLocaleDateString("en-GB")}`;
-      const { data, error } = await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      const { data, error } = await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: {
           action: "create_campaign",
           name,
@@ -308,7 +308,7 @@ export default function BroadcastManager() {
 
     while (isBroadcastingRef.current) {
       try {
-        const { data, error } = await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+        const { data, error } = await supabase.functions.invoke("broadcast-manager-wacaller", {
           body: {
             action: "process_batch",
             campaign_id: campaignId,
@@ -357,7 +357,7 @@ export default function BroadcastManager() {
     isBroadcastingRef.current = false;
     setIsBroadcasting(false);
     try {
-      await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "pause_campaign", campaign_id: activeCampaign.id, user_id: user?.id },
       });
       toast({
@@ -377,7 +377,7 @@ export default function BroadcastManager() {
     isBroadcastingRef.current = true;
     setIsBroadcasting(true);
     try {
-      await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "resume_campaign", campaign_id: activeCampaign.id, user_id: user?.id },
       });
       toast({
@@ -399,7 +399,7 @@ export default function BroadcastManager() {
     isBroadcastingRef.current = false;
     setIsBroadcasting(false);
     try {
-      await supabase.functions.invoke("broadcast-manager-Glowix_books", {
+      await supabase.functions.invoke("broadcast-manager-wacaller", {
         body: { action: "cancel_campaign", campaign_id: activeCampaign.id, user_id: user?.id },
       });
       toast({ title: "Campaign Cancelled", description: "Unsent queue items will not be sent." });
