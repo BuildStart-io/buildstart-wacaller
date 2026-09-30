@@ -105,11 +105,62 @@ export default function Agent() {
   });
 
   const generateFaqSync = async () => {
-      // Implement local logic to fetch FAQs & Products and append them to businessPrompt
-      toast({
-          title: "Coming soon",
-          description: "Auto-syncing FAQs to prompt will be added in the next update."
-      });
+    try {
+      toast({ title: "Syncing Knowledge Base...", description: "Fetching Products and FAQs..." });
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      
+      const [productsRes, faqsRes] = await Promise.all([
+        supabase.from('products').select('*').eq('is_active', true).neq('add_to_calling_agent', false),
+        supabase.from('faqs').select('*').eq('is_active', true).neq('add_to_calling_agent', false)
+      ]);
+      
+      if (productsRes.error) throw productsRes.error;
+      if (faqsRes.error) throw faqsRes.error;
+      
+      let knowledgeBase = "\n\n--- BUSINESS KNOWLEDGE (AUTO-GENERATED) ---\n";
+      
+      if (productsRes.data && productsRes.data.length > 0) {
+        knowledgeBase += "[Products & Services]\n";
+        productsRes.data.forEach(p => {
+          knowledgeBase += `- ${p.name}: LKR ${p.price} (Type: ${p.product_type})`;
+          if (p.description) knowledgeBase += ` - ${p.description}`;
+          knowledgeBase += "\n";
+        });
+        knowledgeBase += "\n";
+      }
+      
+      if (faqsRes.data && faqsRes.data.length > 0) {
+        knowledgeBase += "[Frequently Asked Questions]\n";
+        faqsRes.data.forEach(f => {
+          knowledgeBase += `- Q: ${f.question} | A: ${f.answer}\n`;
+        });
+      }
+      knowledgeBase += "-------------------------------------------\n";
+
+      const markerStart = "--- BUSINESS KNOWLEDGE (AUTO-GENERATED) ---";
+      const markerEnd = "-------------------------------------------";
+      
+      let newPrompt = businessPrompt;
+      const startIndex = newPrompt.indexOf(markerStart);
+      
+      if (startIndex !== -1) {
+        const endIndex = newPrompt.indexOf(markerEnd, startIndex);
+        if (endIndex !== -1) {
+          newPrompt = newPrompt.substring(0, startIndex).trim() + knowledgeBase + newPrompt.substring(endIndex + markerEnd.length).trim();
+        } else {
+          newPrompt = newPrompt.trim() + knowledgeBase;
+        }
+      } else {
+        newPrompt = newPrompt.trim() + knowledgeBase;
+      }
+      
+      setBusinessPrompt(newPrompt);
+      toast({ title: "Knowledge base synced", description: "Review the system prompt and click Save & Sync Server." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Sync failed", description: error.message });
+    }
   };
 
   if (idLoading || roleLoading || staffLoading) {

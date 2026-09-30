@@ -27,6 +27,7 @@ interface Faq {
   is_active: boolean;
   is_tracked: boolean;
   media_urls: string[] | null;
+  add_to_calling_agent?: boolean;
   created_at: string;
 }
 
@@ -54,6 +55,7 @@ export default function Faqs() {
   const [isActive, setIsActive] = useState(true);
   const [isTracked, setIsTracked] = useState(false);
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [addToCallingAgent, setAddToCallingAgent] = useState(true);
 
   const fetchData = async () => {
     try {
@@ -89,6 +91,7 @@ export default function Faqs() {
     setIsActive(true);
     setIsTracked(false);
     setMediaUrls([]);
+    setAddToCallingAgent(true);
     setEditingFaq(null);
   };
 
@@ -100,6 +103,7 @@ export default function Faqs() {
     setIsActive(faq.is_active);
     setIsTracked(faq.is_tracked);
     setMediaUrls(faq.media_urls || []);
+    setAddToCallingAgent(faq.add_to_calling_agent !== false);
     setDialogOpen(true);
   };
 
@@ -115,8 +119,9 @@ export default function Faqs() {
         is_active: isActive,
         is_tracked: isTracked,
         media_urls: mediaUrls,
+        add_to_calling_agent: addToCallingAgent,
         user_id: effectiveUserId || user!.id,
-      };
+      } as any;
 
       if (editingFaq) {
         const { error } = await supabase
@@ -288,7 +293,21 @@ export default function Faqs() {
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2">
+                <div className="flex items-center justify-between border-t pt-4 mt-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="add_to_calling_agent">Add to Calling Agent</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Include this FAQ in the AI Voice Agent's knowledge base.
+                    </p>
+                  </div>
+                  <Switch
+                    id="add_to_calling_agent"
+                    checked={addToCallingAgent}
+                    onCheckedChange={setAddToCallingAgent}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                     Cancel
                   </Button>

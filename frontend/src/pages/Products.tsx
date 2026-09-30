@@ -31,6 +31,7 @@ interface Product {
   images: string[];
   video_url: string | null;
   is_active: boolean;
+  add_to_calling_agent?: boolean;
   created_at: string;
 }
 
@@ -56,6 +57,7 @@ export default function Products() {
   const [images, setImages] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
+  const [addToCallingAgent, setAddToCallingAgent] = useState(true);
 
   const fetchProducts = async () => {
     try {
@@ -91,6 +93,7 @@ export default function Products() {
     setImages([]);
     setVideoUrl(null);
     setIsActive(true);
+    setAddToCallingAgent(true);
     setEditingProduct(null);
   };
 
@@ -105,6 +108,7 @@ export default function Products() {
     setImages(Array.isArray(product.images) ? product.images : []);
     setVideoUrl(product.video_url || null);
     setIsActive(product.is_active);
+    setAddToCallingAgent(product.add_to_calling_agent !== false); // default true
     setDialogOpen(true);
   };
 
@@ -123,6 +127,7 @@ export default function Products() {
         images,
         video_url: videoUrl,
         is_active: isActive,
+        add_to_calling_agent: addToCallingAgent,
         user_id: effectiveUserId || user!.id,
       } as any;
 
@@ -296,7 +301,21 @@ export default function Products() {
 
                 <ProductVideoUpload videoUrl={videoUrl} onChange={setVideoUrl} />
 
-                <div className="flex justify-end gap-2">
+                <div className="flex items-center justify-between border-t pt-4 mt-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="add_to_calling_agent">Add to Calling Agent</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Include this product in the AI Voice Agent's knowledge base.
+                    </p>
+                  </div>
+                  <Switch
+                    id="add_to_calling_agent"
+                    checked={addToCallingAgent}
+                    onCheckedChange={setAddToCallingAgent}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                     Cancel
                   </Button>
