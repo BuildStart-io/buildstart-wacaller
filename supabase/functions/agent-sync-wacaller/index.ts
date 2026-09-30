@@ -49,12 +49,29 @@ serve(async (req) => {
       });
     }
 
-    const { business_prompt, greeting_message, fallback_message, voice_model } = await req.json();
-
     const businessId = userData.business_id;
-
-    // Use a client specifically targeting whatsapp_infra
     const supabaseInfra = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'whatsapp_infra' } });
+
+    if (req.method === "GET") {
+      const { data, error } = await supabaseInfra
+        .from('agent_configs')
+        .select('*')
+        .eq('business_id', businessId)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is no rows found
+        console.error("Supabase select error:", error);
+        throw new Error(error.message);
+      }
+      
+      return new Response(JSON.stringify({ success: true, data: data || {} }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // It's a POST request
+    const { business_prompt, greeting_message, fallback_message, voice_model } = await req.json();
 
     const { data, error } = await supabaseInfra
       .from('agent_configs')
@@ -76,7 +93,7 @@ serve(async (req) => {
       throw new Error(error.message);
     }
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    return new Response(JSON.stringify({ success: true, data: data[0] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
