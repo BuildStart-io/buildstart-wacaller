@@ -12,6 +12,9 @@ import Orders from "./pages/Orders";
 import Conversations from "./pages/Conversations";
 import Leads from "./pages/Leads";
 import Settings from "./pages/Settings";
+import Agent from "./pages/Agent";
+import Calls from "./pages/Calls";
+import Schedule from "./pages/Schedule";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminAccounts from "./pages/AdminAccounts";
 import AdminUserDetail from "./pages/AdminUserDetail";
@@ -40,6 +43,9 @@ const App = () => (
           <Route path="/dashboard/products" element={<Products />} />
           <Route path="/dashboard/faqs" element={<Faqs />} />
           <Route path="/dashboard/orders" element={<Orders />} />
+          <Route path="/dashboard/agent" element={<Agent />} />
+          <Route path="/dashboard/calls" element={<Calls />} />
+          <Route path="/dashboard/schedule" element={<Schedule />} />
           <Route path="/dashboard/conversations" element={<Conversations />} />
           <Route path="/dashboard/leads" element={<Leads />} />
           <Route path="/dashboard/settings" element={<Settings />} />

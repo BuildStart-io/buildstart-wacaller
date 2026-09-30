@@ -6,3 +6,47 @@ verify_jwt = false
 verify_jwt = false
 [functions.assetlinks]
 verify_jwt = false
+
+[functions.agent-sync-wacaller]
+enabled = true
+verify_jwt = false
+import_map = "./functions/agent-sync-wacaller/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/agent-sync-wacaller/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/agent-sync-wacaller/*.html" ]
+
+[functions.wa-pair-wacaller]
+enabled = true
+verify_jwt = false
+import_map = "./functions/wa-pair-wacaller/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/wa-pair-wacaller/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/wa-pair-wacaller/*.html" ]
+
+[functions.get-calls-wacaller]
+enabled = true
+verify_jwt = false
+import_map = "./functions/get-calls-wacaller/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/get-calls-wacaller/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/get-calls-wacaller/*.html" ]
+
+[functions.schedule-call-wacaller]
+enabled = true
+verify_jwt = false
+import_map = "./functions/schedule-call-wacaller/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/schedule-call-wacaller/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/schedule-call-wacaller/*.html" ]
