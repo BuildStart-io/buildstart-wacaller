@@ -34,22 +34,17 @@ serve(async (req) => {
       });
     }
 
-    // Get the business_id from wacaller_customization.users
-    const supabaseWacaller = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'wacaller_customization' } });
-    const { data: userData, error: userError } = await supabaseWacaller
-      .from('users')
-      .select('business_id, role')
-      .eq('id', user.id)
-      .single();
+        const supabaseWacaller = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'wacaller_customization' } });
+    
+    // Check if the user is a staff member
+    const { data: staffData } = await supabaseWacaller
+      .from('staff_accounts')
+      .select('owner_id')
+      .eq('staff_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (userError || !userData || !userData.business_id) {
-      return new Response(JSON.stringify({ error: "User or business not found" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const businessId = userData.business_id;
+    const businessId = staffData?.owner_id || user.id;
     const supabaseInfra = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'whatsapp_infra' } });
 
     if (req.method === "GET") {

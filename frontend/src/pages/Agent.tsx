@@ -16,26 +16,14 @@ export default function Agent() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { roleLoading } = useRole();
-  const { isStaff, hasPermission, loading: staffLoading } = useStaffAccess();
+  const { isStaff, hasPermission, loading: staffLoading, effectiveUserId } = useStaffAccess();
 
   const [businessPrompt, setBusinessPrompt] = useState("");
   const [greetingMessage, setGreetingMessage] = useState("");
   const [fallbackMessage, setFallbackMessage] = useState("");
 
-  const { data: businessId, isLoading: idLoading } = useQuery({
-    queryKey: ['businessId'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data, error } = await supabase
-        .from('users')
-        .select('business_id')
-        .eq('id', user.id)
-        .single();
-      if (error) throw error;
-      return data?.business_id;
-    }
-  });
+  const businessId = effectiveUserId;
+  const idLoading = staffLoading;
 
   const { data: agentConfig, isLoading: configLoading } = useQuery({
     queryKey: ['agentConfig', businessId],

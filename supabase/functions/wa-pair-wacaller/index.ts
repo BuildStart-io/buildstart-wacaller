@@ -35,20 +35,16 @@ serve(async (req) => {
     }
 
     const supabaseWacaller = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'wacaller_customization' } });
-    const { data: userData, error: userError } = await supabaseWacaller
-      .from('users')
-      .select('business_id')
-      .eq('id', user.id)
-      .single();
+    
+    // Check if the user is a staff member
+    const { data: staffData } = await supabaseWacaller
+      .from('staff_accounts')
+      .select('owner_id')
+      .eq('staff_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (userError || !userData || !userData.business_id) {
-      return new Response(JSON.stringify({ error: "User or business not found" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const businessId = userData.business_id;
+    const businessId = staffData?.owner_id || user.id;
     const goServerUrl = Deno.env.get("GO_SERVER_URL") || "https://wacaller.bandara.me";
 
     const response = await fetch(`${goServerUrl}/api/sessions`, {
