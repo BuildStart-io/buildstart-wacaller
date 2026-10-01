@@ -45,8 +45,38 @@ serve(async (req) => {
       .maybeSingle();
 
     const businessId = staffData?.owner_id || user.id;
-    const goServerUrl = Deno.env.get("GO_SERVER_URL") || "https://wacaller.bandara.me";
+    const goServerUrl = Deno.env.get("GO_SERVER_URL") || "https://buildstart-calling-agent.buildstart.io";
 
+    // 1. Check if a session already exists for this businessId
+    const checkResponse = await fetch(`${goServerUrl}/api/sessions`, {
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    });
+    
+    let existingSessionId = null;
+    let existingSessionState = null;
+    if (checkResponse.ok) {
+      const { sessions } = await checkResponse.json();
+      const existing = sessions?.find((s: any) => s.business_id === businessId);
+      if (existing) {
+        existingSessionId = existing.id;
+        existingSessionState = existing.state;
+      }
+    }
+
+    if (existingSessionId) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        session_id: existingSessionId,
+        state: existingSessionState,
+        is_existing: true
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // 2. If no session exists, create one
     const response = await fetch(`${goServerUrl}/api/sessions`, {
       method: "POST",
       headers: {
@@ -63,7 +93,7 @@ serve(async (req) => {
 
     const data = await response.json();
 
-    return new Response(JSON.stringify({ success: true, session_id: data.session_id }), {
+    return new Response(JSON.stringify({ success: true, session_id: data.id || data.session_id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
