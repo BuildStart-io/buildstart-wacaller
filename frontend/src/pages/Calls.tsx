@@ -143,42 +143,56 @@ export default function Calls() {
                       No transcript available for this call.
                     </div>
                   ) : (
-                    selectedCall.transcript_json.map((msg, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "flex w-full gap-3",
-                          msg.role === 'agent' ? "justify-end" : "justify-start"
-                        )}
-                      >
-                        {msg.role !== 'agent' && (
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-1">
-                            <span className="text-blue-700 text-xs font-bold">U</span>
-                          </div>
-                        )}
+                    (() => {
+                      const aggregatedTranscripts: any[] = [];
+                      selectedCall.transcript_json.forEach((msg) => {
+                        if (aggregatedTranscripts.length > 0) {
+                          const lastMsg = aggregatedTranscripts[aggregatedTranscripts.length - 1];
+                          if (lastMsg.role === msg.role) {
+                            lastMsg.text += " " + msg.text;
+                            return;
+                          }
+                        }
+                        aggregatedTranscripts.push({ ...msg });
+                      });
+
+                      return aggregatedTranscripts.map((msg, i) => (
                         <div
+                          key={i}
                           className={cn(
-                            "px-4 py-3 rounded-2xl max-w-[80%]",
-                            msg.role === 'agent'
-                              ? "bg-primary text-primary-foreground rounded-tr-sm"
-                              : "bg-muted rounded-tl-sm"
+                            "flex w-full gap-3",
+                            msg.role === 'agent' || msg.role === 'assistant' ? "justify-end" : "justify-start"
                           )}
                         >
-                          <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                          <div className={cn(
-                            "text-[10px] mt-2 opacity-70",
-                            msg.role === 'agent' ? "text-right" : "text-left"
-                          )}>
-                            {msg.role === 'agent' ? 'AI Agent' : 'User'}
+                          {(msg.role !== 'agent' && msg.role !== 'assistant') && (
+                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-1">
+                              <span className="text-blue-700 text-xs font-bold">U</span>
+                            </div>
+                          )}
+                          <div
+                            className={cn(
+                              "px-4 py-3 rounded-2xl max-w-[80%]",
+                              msg.role === 'agent' || msg.role === 'assistant'
+                                ? "bg-primary text-primary-foreground rounded-tr-sm"
+                                : "bg-muted rounded-tl-sm"
+                            )}
+                          >
+                            <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                            <div className={cn(
+                              "text-[10px] mt-2 opacity-70",
+                              msg.role === 'agent' || msg.role === 'assistant' ? "text-right" : "text-left"
+                            )}>
+                              {msg.role === 'agent' || msg.role === 'assistant' ? 'AI Agent' : 'User'}
+                            </div>
                           </div>
+                          {(msg.role === 'agent' || msg.role === 'assistant') && (
+                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-1">
+                              <Bot className="w-4 h-4 text-primary" />
+                            </div>
+                          )}
                         </div>
-                        {msg.role === 'agent' && (
-                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-1">
-                            <Bot className="w-4 h-4 text-primary" />
-                          </div>
-                        )}
-                      </div>
-                    ))
+                      ));
+                    })()
                   )}
                 </div>
               </ScrollArea>
