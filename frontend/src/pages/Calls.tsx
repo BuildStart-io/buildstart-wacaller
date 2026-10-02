@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, Clock } from "lucide-react";
+import { Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, Clock, Bot } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -144,16 +144,29 @@ export default function Calls() {
                     </div>
                   ) : (
                     (() => {
+                      let transcripts = selectedCall.transcript_json;
+                      if (typeof transcripts === 'string') {
+                        try {
+                          transcripts = JSON.parse(transcripts);
+                        } catch (e) {
+                          transcripts = [];
+                        }
+                      }
+                      if (!Array.isArray(transcripts)) {
+                        transcripts = [];
+                      }
+
                       const aggregatedTranscripts: any[] = [];
-                      selectedCall.transcript_json.forEach((msg) => {
+                      transcripts.forEach((msg) => {
+                        if (!msg) return;
                         if (aggregatedTranscripts.length > 0) {
                           const lastMsg = aggregatedTranscripts[aggregatedTranscripts.length - 1];
                           if (lastMsg.role === msg.role) {
-                            lastMsg.text += " " + msg.text;
+                            lastMsg.text += " " + (msg.text || "");
                             return;
                           }
                         }
-                        aggregatedTranscripts.push({ ...msg });
+                        aggregatedTranscripts.push({ ...msg, text: msg.text || "" });
                       });
 
                       return aggregatedTranscripts.map((msg, i) => (
