@@ -172,16 +172,21 @@ export default function VoiceAgentConnection() {
     try {
       const response = await fetch(`${GO_SERVER_URL}/api/sessions/${sessionInfo.id}`, {
         method: "DELETE"
-      });
-      if (response.ok) {
-        toast({ title: "Session deleted", description: "Voice agent session has been removed." });
-        setSessionInfo(null);
-        setQrCode(null);
-        if (eventSourceRef.current) eventSourceRef.current.close();
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        // Re-fetch to create a new empty one
-        fetchSessionStatus();
+      }).catch(e => null); // catch network errors so we can fallback
+
+      // Fallback: forcefully delete from Supabase if Go server failed, returned error, or was unreachable
+      if (!response || !response.ok) {
+        console.warn("Go server delete failed or unreachable, forcefully deleting session from Supabase CRM.");
+        await supabase.from("whatsapp_sessions").delete().eq("id", sessionInfo.id);
       }
+
+      toast({ title: "Session deleted", description: "Voice agent session has been removed." });
+      setSessionInfo(null);
+      setQrCode(null);
+      if (eventSourceRef.current) eventSourceRef.current.close();
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      // Re-fetch to create a new empty one
+      fetchSessionStatus();
     } catch (e: any) {
       toast({ title: "Error deleting session", description: e.message, variant: "destructive" });
     }
