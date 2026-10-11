@@ -61,6 +61,20 @@ serve(async (req) => {
       if (existing) {
         existingSessionId = existing.id;
         existingSessionState = existing.state;
+      } else {
+        // If no session explicitly matched this businessId, but an active paired session exists on the server,
+        // link it to this business so the user immediately sees the connected device
+        const paired = sessions?.find((s: any) => s.paired === true || s.state === 'open' || s.state === 'connected');
+        if (paired) {
+          const supabaseInfra = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'whatsapp_infra' } });
+          await supabaseInfra
+            .from('whatsapp_sessions')
+            .update({ business_id: businessId, updated_at: new Date().toISOString() })
+            .eq('session_id', paired.id);
+          existingSessionId = paired.id;
+          existingSessionState = paired.state;
+          console.log(`Auto-linked paired session ${paired.id} to business ${businessId}`);
+        }
       }
     }
 
