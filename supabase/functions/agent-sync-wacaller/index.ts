@@ -88,30 +88,6 @@ serve(async (req) => {
       throw new Error(error.message);
     }
 
-    // Ensure the connected WhatsApp session is linked to this business so calls immediately use this config
-    const { data: mySessions } = await supabaseInfra
-      .from('whatsapp_sessions')
-      .select('session_id')
-      .eq('business_id', businessId);
-
-    if (!mySessions || mySessions.length === 0) {
-      // If this business doesn't own a session row yet, link the active paired session to this business
-      const { data: pairedSessions } = await supabaseInfra
-        .from('whatsapp_sessions')
-        .select('session_id')
-        .neq('jid', '')
-        .order('updated_at', { ascending: false })
-        .limit(1);
-
-      if (pairedSessions && pairedSessions.length > 0) {
-        await supabaseInfra
-          .from('whatsapp_sessions')
-          .update({ business_id: businessId, updated_at: new Date().toISOString() })
-          .eq('session_id', pairedSessions[0].session_id);
-        console.log(`Linked active WhatsApp session ${pairedSessions[0].session_id} to business ${businessId}`);
-      }
-    }
-
     return new Response(JSON.stringify({ success: true, data: data[0] }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

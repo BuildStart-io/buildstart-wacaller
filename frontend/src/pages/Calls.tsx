@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, Clock, Bot, MicOff } from "lucide-react";
+import { Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, Clock, Bot } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { CallAudioPlayer } from "@/components/calls/CallAudioPlayer";
 
 type CallRecord = {
   id: string;
@@ -17,7 +16,6 @@ type CallRecord = {
   duration: number;
   status: string;
   transcript_json: any[];
-  recording_url?: string;
 };
 
 export default function Calls() {
@@ -121,36 +119,21 @@ export default function Calls() {
         )}>
           {selectedCall ? (
             <>
-              <div className="h-16 flex items-center px-4 border-b bg-card justify-between shadow-sm z-10 gap-2">
-                <div className="flex items-center gap-3 min-w-0">
+              <div className="h-16 flex items-center px-4 border-b bg-card justify-between shadow-sm z-10">
+                <div className="flex items-center gap-3">
                   <button 
                     onClick={() => setSelectedCall(null)}
-                    className="sm:hidden p-2 -ml-2 rounded-md hover:bg-accent flex-shrink-0"
+                    className="sm:hidden p-2 -ml-2 rounded-md hover:bg-accent"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
                   </button>
-                  <div className="min-w-0">
-                    <h2 className="font-semibold truncate">{selectedCall.caller_number || "Unknown"}</h2>
-                    <p className="text-xs text-muted-foreground whitespace-nowrap">
+                  <div>
+                    <h2 className="font-semibold">{selectedCall.caller_number || "Unknown"}</h2>
+                    <p className="text-xs text-muted-foreground">
                       {format(new Date(selectedCall.started_at), 'PPP p')} • {formatDuration(selectedCall.duration)}
                     </p>
                   </div>
                 </div>
-
-                {/* Call Voice Recording Player */}
-                {selectedCall.recording_url ? (
-                  <div className="flex-shrink-0">
-                    <CallAudioPlayer 
-                      src={selectedCall.recording_url} 
-                      duration={selectedCall.duration} 
-                    />
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5 opacity-60 flex-shrink-0">
-                    <MicOff className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">No recording</span>
-                  </div>
-                )}
               </div>
 
               <ScrollArea className="flex-1 p-4">
