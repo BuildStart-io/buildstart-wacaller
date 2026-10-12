@@ -35,26 +35,36 @@ serve(async (req) => {
     }
 
     const supabaseWacaller = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'wacaller_customization' } });
-    const { data: userData, error: userError } = await supabaseWacaller
-      .from('users')
-      .select('business_id, role')
-      .eq('id', user.id)
-      .single();
+    
+    // Check if the user is a staff member
+    const { data: staffData } = await supabaseWacaller
+      .from('staff_accounts')
+      .select('owner_id')
+      .eq('staff_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (userError || !userData || !userData.business_id) {
-      return new Response(JSON.stringify({ error: "User or business not found" }), {
-        status: 403,
+    const businessId = staffData?.owner_id || user.id;
+    const supabaseInfra = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'whatsapp_infra' } });
+
+    // Handle GET: retrieve scheduled calls queue for this business
+    if (req.method === "GET") {
+      const { data: calls, error: callsError } = await supabaseInfra
+        .from('scheduled_calls')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('scheduled_time', { ascending: false })
+        .limit(50);
+
+      if (callsError) {
+        throw new Error(callsError.message);
+      }
+
+      return new Response(JSON.stringify({ success: true, calls }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
       });
     }
-
-    // Only business admins or super admins should be able to schedule
-    if (userData.role !== 'admin' && userData.role !== 'super_admin' && userData.role !== 'owner') {
-        return new Response(JSON.stringify({ error: "Insufficient permissions" }), {
-           status: 403,
-           headers: { ...corsHeaders, "Content-Type": "application/json" },
-       });
-   }
 
     const { numbers, gapMinutes } = await req.json();
 
@@ -66,22 +76,29 @@ serve(async (req) => {
     }
 
     const gap = typeof gapMinutes === 'number' ? gapMinutes : 1; // default 1 min
-    const businessId = userData.business_id;
 
     // Create the schedule payloads
     const now = new Date();
-    const scheduledCalls = numbers.map((phone, index) => {
-      const scheduledTime = new Date(now.getTime() + index * gap * 60000);
-      return {
-        business_id: businessId,
-        phone_number: phone,
-        scheduled_time: scheduledTime.toISOString(),
-        status: 'pending'
-      };
-    });
+    const scheduledCalls = numbers
+      .map((p: any) => typeof p === 'string' ? p.replace(/[\s\-\(\)\+]/g, '').trim() : '')
+      .filter((p: string) => p.length >= 7)
+      .map((phone: string, index: number) => {
+        const scheduledTime = new Date(now.getTime() + index * gap * 60000);
+        return {
+          business_id: businessId,
+          phone_number: phone,
+          scheduled_time: scheduledTime.toISOString(),
+          status: 'pending'
+        };
+      });
 
-    const supabaseInfra = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'whatsapp_infra' } });
-    
+    if (scheduledCalls.length === 0) {
+      return new Response(JSON.stringify({ error: "No valid phone numbers found" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data, error } = await supabaseInfra
       .from('scheduled_calls')
       .insert(scheduledCalls)

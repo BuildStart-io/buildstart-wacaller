@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Calendar, Play } from "lucide-react";
+import { Loader2, Calendar, Play, Clock, CheckCircle2, AlertCircle, PhoneCall } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useRole } from "@/hooks/useRole";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 
@@ -21,6 +23,30 @@ export default function Schedule() {
   const [numbersText, setNumbersText] = useState("");
   const [gapMinutes, setGapMinutes] = useState("1");
   const [testNumber, setTestNumber] = useState("");
+
+  const { data: queueCalls = [], isLoading: queueLoading } = useQuery({
+    queryKey: ['scheduled-calls'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/schedule-call-wacaller`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      if (!response.ok) return [];
+      const res = await response.json();
+      return (res.calls || []) as Array<{
+        id: string;
+        phone_number: string;
+        scheduled_time: string;
+        status: string;
+        created_at: string;
+      }>;
+    },
+    refetchInterval: 5000,
+  });
 
   const scheduleMutation = useMutation({
     mutationFn: async () => {
@@ -206,13 +232,83 @@ export default function Schedule() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Queue Status</CardTitle>
-            <CardDescription>View upcoming and completed scheduled calls.</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Queue Status</CardTitle>
+                <CardDescription>View upcoming and completed scheduled calls.</CardDescription>
+              </div>
+              <Badge variant="outline" className="px-3 py-1">
+                {queueCalls.length} {queueCalls.length === 1 ? 'call' : 'calls'} in queue
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
-              <p>Fetching scheduled calls will be implemented here.</p>
-            </div>
+            {queueLoading ? (
+              <div className="flex justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : queueCalls.length === 0 ? (
+              <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed">
+                <p>No scheduled calls in the queue yet. Add numbers above to schedule.</p>
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Phone Number</TableHead>
+                      <TableHead>Scheduled For</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {queueCalls.map((call) => {
+                      const isPending = call.status === 'pending';
+                      const isCalling = call.status === 'calling';
+                      const isCompleted = call.status === 'completed';
+                      const isFailed = call.status.startsWith('failed');
+
+                      return (
+                        <TableRow key={call.id}>
+                          <TableCell className="font-mono font-medium">
+                            +{call.phone_number.replace(/^\+/, '')}
+                          </TableCell>
+                          <TableCell>
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock className="w-3.5 h-3.5" />
+                              {new Date(call.scheduled_time).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {isCalling ? (
+                              <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse flex items-center gap-1 w-fit">
+                                <PhoneCall className="w-3 h-3 animate-spin" /> Calling...
+                              </Badge>
+                            ) : isCompleted ? (
+                              <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 flex items-center gap-1 w-fit">
+                                <CheckCircle2 className="w-3 h-3" /> Completed
+                              </Badge>
+                            ) : isFailed ? (
+                              <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                                <AlertCircle className="w-3 h-3" /> {call.status}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-500 border-amber-500/20 bg-amber-500/10 flex items-center gap-1 w-fit">
+                                <Clock className="w-3 h-3" /> Scheduled
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
