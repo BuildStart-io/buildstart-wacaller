@@ -105,6 +105,7 @@ export default function VoiceAgentConnection() {
 
   const startPairing = async () => {
     if (!sessionInfo?.id) return;
+    const isRegenerate = Boolean(qrCode);
     setQrLoading(true);
     setQrCode(null);
     qrFoundRef.current = false;
@@ -135,6 +136,27 @@ export default function VoiceAgentConnection() {
       }
     };
 
+    let pairTriggered = false;
+    const triggerPairEndpoint = async () => {
+      if (pairTriggered || qrFoundRef.current) return;
+      pairTriggered = true;
+      try {
+        log("Requesting new QR code from voice server...");
+        const pairRes = await fetch(`${GO_SERVER_URL}/api/sessions/${sessionInfo.id}/pair`, {
+          method: "POST"
+        });
+        if (!pairRes.ok) {
+          log(`Pair endpoint returned ${pairRes.status}`);
+        }
+      } catch (e: any) {
+        log(`Failed to trigger pair: ${e.message || e}`);
+      }
+    };
+
+    if (isRegenerate || sessionInfo.state === "logged_out" || sessionInfo.state === "disconnected") {
+      await triggerPairEndpoint();
+    }
+
     // Setup Polling Fallback
     if (pollingRef.current) clearInterval(pollingRef.current);
     
@@ -152,6 +174,8 @@ export default function VoiceAgentConnection() {
             log(`POLL: QR found for session ${sessionInfo.id}`);
             setQrCode(mySession.qr);
             qrFoundRef.current = true;
+          } else if (!mySession.qr && !mySession.paired && mySession.state !== "open" && !pairTriggered) {
+            await triggerPairEndpoint();
           }
           if (mySession.state === "open" || mySession.paired === true) {
             setQrCode(null);
@@ -161,7 +185,7 @@ export default function VoiceAgentConnection() {
       } catch (e: any) {}
     };
 
-    const initialTimeout = setTimeout(poll, 2000);
+    setTimeout(poll, 1000);
     pollingRef.current = setInterval(poll, 3000);
   };
 
