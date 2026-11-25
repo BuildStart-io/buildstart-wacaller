@@ -51,8 +51,8 @@ entrypoint = "./functions/schedule-call-wacaller/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/schedule-call-wacaller/*.html" ]
 
-[functions.sales-sync-wacaller]
+[functions.post-call-wacaller]
 enabled = true
 verify_jwt = false
-import_map = "./functions/sales-sync-wacaller/deno.json"
-entrypoint = "./functions/sales-sync-wacaller/index.ts"
+import_map = "./functions/post-call-wacaller/deno.json"
+entrypoint = "./functions/post-call-wacaller/index.ts"

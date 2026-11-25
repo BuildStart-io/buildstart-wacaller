@@ -37,7 +37,6 @@ flowchart TD
     subgraph ExternalServices ["External Cloud Services"]
         MinIO["MinIO S3 (Stereo Call Audio WAV)"]
         GeminiAPI["Google Gemini Live & Flash APIs"]
-        SalesDash["External Sales Dashboard (sales.buildstart.io)"]
     end
 
     UI -->|HTTPS / REST| EdgeFns
@@ -48,8 +47,8 @@ flowchart TD
     GoServer -->|Read Configs & Push Logs| WAInfra
     GoServer <-->|Bidirectional Audio WebSockets| GeminiAPI
     GoServer -->|Upload Recordings| MinIO
-    WAInfra -->|pg_net Webhook Trigger| EdgeFns
-    EdgeFns -->|Post-Call Hook| SalesDash
+    GoServer -->|Post-Call Webhook| EdgeFns
+    EdgeFns -->|Send Summary API| GoServer
 ```
 
 ---
@@ -213,13 +212,12 @@ flowchart LR
         F_GetCalls["get-calls-wacaller"]
         F_Sched["schedule-call-wacaller"]
         F_Pair["wa-pair-wacaller"]
-        F_SalesSync["sales-sync-wacaller"]
+        F_PostCall["post-call-wacaller"]
     end
 
     subgraph Backend ["Databases & External Servers"]
         DB_Infra["whatsapp_infra Schema"]
         Go_API["Go Server REST API (/api/sessions)"]
-        Sales_API["External CRM (sales.buildstart.io)"]
     end
 
     C_Agent -->|GET / POST Config| F_Sync
@@ -231,16 +229,16 @@ flowchart LR
     F_GetCalls --> DB_Infra
     F_Sched --> DB_Infra
     F_Pair --> Go_API
-    DB_Infra -->|pg_net Trigger on call ended| F_SalesSync
-    F_SalesSync --> Sales_API
+    Go_API -->|Webhook on call.completed| F_PostCall
+    F_PostCall -->|POST /messages/send| Go_API
 ```
 
 ### 1. `agent-sync-wacaller` (`supabase/functions/agent-sync-wacaller/index.ts`)
 - **Method**: `GET` / `POST`
 - **Role**: The configuration bridge between the CRM frontend and the voice agent engine.
 - **Key Logic**:
-  - `GET`: Authenticates user, resolves `business_id` (supporting staff tenancy), and returns existing voice settings from `whatsapp_infra.agent_configs`.
-  - `POST`: Validates inputs and performs an upsert into `whatsapp_infra.agent_configs` (`business_prompt`, `greeting_message`, `fallback_message`, `voice_model`).
+  - `GET`: Authenticates user, resolves `business_id` (supporting staff tenancy), strips the Local CRM persona prefix, and returns user-editable voice settings from `whatsapp_infra.agent_configs`.
+  - `POST`: Prepends the Sri Lanka consultant `LOCAL_BASE_PROMPT`, enforces `"Aoede"` voice and Sinhala fallback defaults, and upserts into `whatsapp_infra.agent_configs` (`business_prompt`, `greeting_message`, `fallback_message`, `voice_model`).
   - **Security**: Validates bearer JWT against `supabase.auth.getUser(token)`; enforces that staff only read and write to their assigned owner's configuration.
 
 ### 2. `get-calls-wacaller` (`supabase/functions/get-calls-wacaller/index.ts`)
@@ -276,22 +274,11 @@ flowchart LR
   - If a session already exists for the business, returns the existing session ID and state (e.g. `open`, `qr`, `connecting`).
   - If no session exists, issues `POST ${GO_SERVER_URL}/api/sessions` with `{ business_id: businessId }`, initializing a new whatsmeow client instance and returning the `session_id`.
 
-### 5. `sales-sync-wacaller` (`supabase/functions/sales-sync-wacaller/index.ts`)
-- **Method**: `POST` (Triggered via PostgreSQL `pg_net` webhook)
-- **Role**: Real-time sales integration webhook.
-- **Trigger**: Fired by PostgreSQL trigger `on_call_ended_sales_sync` on `whatsapp_infra.call_logs` whenever a call status transitions to `'ended'` and `duration > 30` seconds.
+### 5. `post-call-wacaller` (`supabase/functions/post-call-wacaller/index.ts`)
+- **Method**: `POST` (Triggered via Go server `POST_CALL_WEBHOOK_URL`)
+- **Role**: Post-call lead qualification and automated Sinhala WhatsApp summary sender for Local CRM businesses.
 - **Key Logic**:
-  - Receives the updated call record from PostgreSQL.
-  - Formats payload:
-    ```json
-    {
-      "phone": "94769652770",
-      "call_status": "answered",
-      "call_duration_seconds": 142,
-      "send_whatsapp": true
-    }
-    ```
-  - Posts with `CALLER_API_KEY` authorization to `https://sales.buildstart.io/api/public/caller/call-complete`, synchronizing telephony outcomes into the core sales pipeline.
+  - Authenticates `X-Webhook-Secret`, verifies `business_id` belongs to the Local CRM, analyzes the call transcript with Gemini to build a structured Lead Dossier, and delivers `whatsapp_summary_sinhala` through the Go server's authenticated `POST /api/sessions/{sid}/messages/send` endpoint.
 
 ---
 
@@ -408,31 +395,25 @@ When a voice conversation ends, the system does not simply hang up. It triggers 
 
 ```mermaid
 flowchart TD
-    A["Call Finishes (Duration > 30s)"] --> B["Go Server: Upload Stereo WAV to MinIO"]
+    A["Call Finishes (Answered, >= 2 Turns)"] --> B["Go Server: Upload Stereo WAV to MinIO"]
     A --> C["Go Server: Save Transcript to call_logs"]
-    A --> D["Go Server: Trigger Post-Call Intelligence (crm_lead.go)"]
-    D --> E["Gemini 2.5 Flash analyzes conversation"]
-    E --> F["Extract Lead Info (Name, Intent, Products, Sentiment, Score)"]
-    F --> G["Insert Lead into wacaller_customization.leads"]
-    F --> H["Send Personalized WhatsApp Summary to Caller"]
-    A --> I["PostgreSQL pg_net Trigger: on_call_ended_sales_sync"]
-    I --> J["Invoke sales-sync-wacaller Edge Function"]
-    J --> K["Push data to sales.buildstart.io/api/public/caller/call-complete"]
+    A --> D["Go Server: Dispatch Generic Post-Call Webhook"]
+    D --> E["post-call-wacaller Edge Function (Gemini)"]
+    E --> F["Extract Lead Dossier (Plan, Score, Temperature)"]
+    F --> H["Send Personalized Sinhala WhatsApp Summary via Go /messages/send"]
 ```
 
 1. **Dual-Channel Audio Archiving**: The Go server records both sides of the conversation (Caller on Channel 0, AI on Channel 1) and uploads a standard 16-bit stereo `.wav` file to MinIO S3 (`call-recordings/<business_id>/<call_id>.wav`).
 2. **Transcript Persistence**: Every speaker turn is recorded with millisecond timestamps and stored in `whatsapp_infra.call_logs.transcript_json`.
-3. **Autonomous Lead Qualification (`crm_lead.go`)**:
-   If the call contains $\ge 2$ conversational turns, the Go server dispatches the transcript to `gemini-2.5-flash` with a structured extraction schema:
+3. **Autonomous Lead Qualification (`post-call-wacaller`)**:
+   If the call contains $\ge 2$ conversational turns, the Go server dispatches a generic JSON webhook to `post-call-wacaller`, which prompts Gemini with a structured extraction schema:
    - **Customer Name & Details**
    - **Expressed Interest & Mentioned Products**
    - **Customer Sentiment** (Positive, Neutral, Hesitant, Frustrated)
    - **Lead Qualification Score** (1 to 10)
    - **Next Action Items**
 4. **Automated WhatsApp Follow-Up**:
-   The AI writes a friendly WhatsApp message summarizing what was discussed (e.g., confirming the flower arrangement discussed, delivery timing, and payment instructions) and sends it immediately to the caller's WhatsApp chat.
-5. **Third-Party Sales Webhook**:
-   The database trigger `on_call_ended_sales_sync` informs external systems (`sales.buildstart.io`) that a verified voice conversation completed.
+   `post-call-wacaller` sends a friendly Sinhala WhatsApp summary message back through the Go server's authenticated `POST /api/sessions/{sid}/messages/send` endpoint.
 
 ---
 
@@ -510,7 +491,7 @@ flowchart LR
   supabase functions deploy get-calls-wacaller --project-ref <PROJECT_ID>
   supabase functions deploy schedule-call-wacaller --project-ref <PROJECT_ID>
   supabase functions deploy wa-pair-wacaller --project-ref <PROJECT_ID>
-  supabase functions deploy sales-sync-wacaller --project-ref <PROJECT_ID>
+  supabase functions deploy post-call-wacaller --project-ref <PROJECT_ID>
   ```
 - **Rule**: Every function belonging to this platform must have the `-wacaller` suffix.
 

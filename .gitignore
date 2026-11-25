@@ -5,3 +5,7 @@ dist/
 *.log
 .gemini/
 *.exp
+.secrets.json
+**/.secrets.json
+_secrets.ts
+**/_secrets.ts
