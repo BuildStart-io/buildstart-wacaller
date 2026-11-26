@@ -64,6 +64,18 @@ function extractJsonObject(raw: string): LeadDossier | null {
   }
 }
 
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  const maxLen = Math.max(ab.length, bb.length);
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -78,7 +90,7 @@ serve(async (req) => {
       });
     }
     const provided = req.headers.get("x-webhook-secret") || "";
-    if (provided !== secrets.webhookSecret) {
+    if (!timingSafeEqualStr(provided, secrets.webhookSecret)) {
       return new Response(JSON.stringify({ error: "Unauthorized webhook" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -102,12 +114,19 @@ serve(async (req) => {
       );
     }
 
-    // Verify business_id belongs to this Local CRM Supabase instance
+    // Verify business_id belongs to Local CRM (check wacaller_customization.profiles first)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(businessId);
-    if (userErr || !userLookup?.user) {
+    const supabaseWacaller = createClient(supabaseUrl, supabaseServiceKey, {
+      db: { schema: "wacaller_customization" },
+    });
+    const { data: localProfile } = await supabaseWacaller
+      .from("profiles")
+      .select("user_id")
+      .eq("user_id", businessId)
+      .maybeSingle();
+
+    if (!localProfile?.user_id) {
       console.log(`[post-call-wacaller] Skipping non-local business_id=${businessId}`);
       return new Response(
         JSON.stringify({ skipped: true, reason: "business_not_in_local_crm" }),

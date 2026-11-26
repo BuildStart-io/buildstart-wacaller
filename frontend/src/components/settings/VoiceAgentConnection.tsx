@@ -5,238 +5,171 @@ import { Loader2, RefreshCw, Smartphone, Wifi, WifiOff, Trash2 } from "lucide-re
 import { supabase } from "@/integrations/supabase/client";
 import { QRCodeSVG } from "qrcode.react";
 
-const GO_SERVER_URL = import.meta.env.VITE_GO_SERVER_URL || "https://buildstart-calling-agent.buildstart.io";
+type VoiceSessionState = {
+  id: string;
+  state: string;
+  paired: boolean;
+  jid?: string;
+};
 
 export default function VoiceAgentConnection() {
-  const [sessionInfo, setSessionInfo] = useState<{ id: string, state: string } | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<VoiceSessionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const { toast } = useToast();
-  
+
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const qrFoundRef = useRef(false);
+  const pollStartedAtRef = useRef<number>(0);
 
   const log = useCallback((msg: string) => {
     const ts = new Date().toISOString().slice(11, 23);
-    console.log(`[VoiceAgent ${ts}] ${msg}`);
-    setDebugInfo(prev => `${ts}: ${msg}\n${prev}`.slice(0, 1000));
+    setDebugInfo((prev) => `${ts}: ${msg}\n${prev}`.slice(0, 1000));
   }, []);
 
-  // Fetch session on mount
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  const callPairFunction = useCallback(async (action: "status" | "pair" | "logout" | "delete") => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error("Authentication required");
+    }
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/wa-pair-wacaller`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action }),
+    });
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Voice session request failed (${response.status})`);
+    }
+    return response.json();
+  }, []);
+
+  const applyStatusResponse = useCallback(
+    (data: any, notifyOnConnect = false) => {
+      if (!data?.session_id) return false;
+      const connected = data.state === "open" || data.state === "connected" || data.paired === true;
+      setSessionInfo({
+        id: data.session_id,
+        state: data.state || (connected ? "open" : "logged_out"),
+        paired: Boolean(data.paired || connected),
+        jid: data.jid || "",
+      });
+      if (connected) {
+        setQrCode(null);
+        setQrLoading(false);
+        stopPolling();
+        if (notifyOnConnect) {
+          toast({
+            title: "Voice Agent Connected",
+            description: "Your WhatsApp number is now successfully linked to the voice agent.",
+          });
+        }
+        return true;
+      }
+      if (data.qr) {
+        setQrCode(data.qr);
+        setQrLoading(false);
+      }
+      return false;
+    },
+    [stopPolling, toast]
+  );
+
   const fetchSessionStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/wa-pair-wacaller`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${session?.access_token}`
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to check session: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setSessionInfo({ id: data.session_id, state: data.state || "logged_out" });
+      const data = await callPairFunction("status");
+      applyStatusResponse(data, false);
     } catch (error: any) {
       console.error("Error fetching voice session:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [callPairFunction, applyStatusResponse]);
 
   useEffect(() => {
     fetchSessionStatus();
-  }, [fetchSessionStatus]);
-
-  // Extract QR code from any SSE event data
-  const handleEventData = useCallback((data: any) => {
-    if (!data || !sessionInfo?.id) return;
-
-    const sessionId = sessionInfo.id;
-
-    if ((data.type === "qr" || data.type === "session-qr") && data.qr) {
-      if (!data.sessionId || !data.session_id || data.sessionId === sessionId || data.session_id === sessionId) {
-        log(`QR received via ${data.type} event`);
-        setQrCode(data.qr);
-        qrFoundRef.current = true;
-        return;
-      }
-    }
-
-    if (data.type === "session-list" && Array.isArray(data.sessions)) {
-      const mySession = data.sessions.find((s: any) => s.id === sessionId);
-      if (mySession) {
-        setSessionInfo({ id: sessionId, state: mySession.state });
-        if (mySession.qr) {
-          log("QR extracted from session-list");
-          setQrCode(mySession.qr);
-          qrFoundRef.current = true;
-        }
-        if (mySession.state === "open" || mySession.paired === true) {
-          log("Session is paired!");
-          setQrCode(null);
-        }
-      }
-    }
-
-    if ((data.type === "auth-state" || data.type === "state" || data.type === "session-state") &&
-        (data.sessionId === sessionId || data.session_id === sessionId)) {
-      setSessionInfo({ id: sessionId, state: data.state });
-      if (data.state === "open" || data.paired === true) {
-        setQrCode(null);
-        toast({
-          title: "Voice Agent Connected",
-          description: "Your WhatsApp number is now successfully linked to the voice agent."
-        });
-      }
-      if (data.qr && data.state === "qr") {
-        log("QR extracted from auth-state event");
-        setQrCode(data.qr);
-        qrFoundRef.current = true;
-      }
-    }
-  }, [sessionInfo?.id, log, toast]);
+    return () => stopPolling();
+  }, [fetchSessionStatus, stopPolling]);
 
   const startPairing = async () => {
     if (!sessionInfo?.id) return;
-    const isRegenerate = Boolean(qrCode);
+    stopPolling();
     setQrLoading(true);
     setQrCode(null);
-    qrFoundRef.current = false;
     setDebugInfo("");
-    log("Starting pairing flow...");
+    pollStartedAtRef.current = Date.now();
+    log("Requesting QR code through secure CRM proxy...");
 
-    // Setup SSE connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    
-    log(`Connecting SSE to ${GO_SERVER_URL}/api/events?session_id=${sessionInfo.id}`);
-    const eventSource = new EventSource(`${GO_SERVER_URL}/api/events?session_id=${sessionInfo.id}`);
-    eventSourceRef.current = eventSource;
-    
-    eventSource.onopen = () => log("SSE connection opened");
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        handleEventData(data);
-      } catch (e) {
-        log(`SSE parse error: ${e}`);
+    try {
+      const data = await callPairFunction("pair");
+      const connected = applyStatusResponse(data, true);
+      if (connected) return;
+      if (data.qr) {
+        log("QR code received.");
+      } else {
+        log("Waiting for QR code generation...");
       }
-    };
-    eventSource.onerror = (error) => {
-      if (eventSource.readyState === EventSource.CLOSED) {
-        log("SSE connection closed permanently, relying on polling fallback");
-      }
-    };
-
-    let pairTriggered = false;
-    const triggerPairEndpoint = async () => {
-      if (pairTriggered || qrFoundRef.current) return;
-      pairTriggered = true;
-      try {
-        log("Requesting new QR code from voice server...");
-        const pairRes = await fetch(`${GO_SERVER_URL}/api/sessions/${sessionInfo.id}/pair`, {
-          method: "POST"
-        });
-        if (!pairRes.ok) {
-          log(`Pair endpoint returned ${pairRes.status}`);
-        }
-      } catch (e: any) {
-        log(`Failed to trigger pair: ${e.message || e}`);
-      }
-    };
-
-    if (isRegenerate || sessionInfo.state === "logged_out" || sessionInfo.state === "disconnected") {
-      await triggerPairEndpoint();
+    } catch (e: any) {
+      log(`Pairing request error: ${e.message || e}`);
+      toast({
+        title: "Failed to request QR code",
+        description: e.message || "Please try again.",
+        variant: "destructive",
+      });
+      setQrLoading(false);
+      return;
     }
 
-    // Setup Polling Fallback
-    if (pollingRef.current) clearInterval(pollingRef.current);
-    
-    const poll = async () => {
-      try {
-        const res = await fetch(`${GO_SERVER_URL}/api/sessions`, {
-          headers: { "Accept": "application/json" }
+    pollingRef.current = setInterval(async () => {
+      if (Date.now() - pollStartedAtRef.current > 180_000) {
+        stopPolling();
+        setQrLoading(false);
+        setQrCode(null);
+        toast({
+          title: "QR pairing timed out",
+          description: "Click Get QR Code to generate a fresh QR.",
         });
-        if (!res.ok) return;
-        const data = await res.json();
-        const mySession = (data.sessions || []).find((s: any) => s.id === sessionInfo.id);
-        if (mySession) {
-          setSessionInfo({ id: sessionInfo.id, state: mySession.state });
-          if (mySession.qr && !qrFoundRef.current) {
-            log(`POLL: QR found for session ${sessionInfo.id}`);
-            setQrCode(mySession.qr);
-            qrFoundRef.current = true;
-          } else if (!mySession.qr && !mySession.paired && mySession.state !== "open" && !pairTriggered) {
-            await triggerPairEndpoint();
-          }
-          if (mySession.state === "open" || mySession.paired === true) {
-            setQrCode(null);
-            if (pollingRef.current) clearInterval(pollingRef.current);
-          }
-        }
-      } catch (e: any) {}
-    };
-
-    setTimeout(poll, 1000);
-    pollingRef.current = setInterval(poll, 3000);
+        return;
+      }
+      try {
+        const data = await callPairFunction("status");
+        applyStatusResponse(data, true);
+      } catch {
+        // Keep polling briefly across transient network blips
+      }
+    }, 2000);
   };
 
   const deleteSession = async () => {
     if (!sessionInfo?.id) return;
     if (!confirm("Are you sure you want to disconnect and delete this voice session?")) return;
-    
+
     try {
-      const response = await fetch(`${GO_SERVER_URL}/api/sessions/${sessionInfo.id}`, {
-        method: "DELETE"
-      }).catch(e => null); // catch network errors so we can fallback
-
-      // Fallback: forcefully delete from Supabase if Go server failed, returned error, or was unreachable
-      if (!response || !response.ok) {
-        console.warn("Go server delete failed or unreachable, forcefully deleting session from Supabase CRM.");
-        await supabase.from("whatsapp_sessions").delete().eq("id", sessionInfo.id);
-      }
-
+      await callPairFunction("delete");
       toast({ title: "Session deleted", description: "Voice agent session has been removed." });
       setSessionInfo(null);
       setQrCode(null);
-      if (eventSourceRef.current) eventSourceRef.current.close();
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      // Re-fetch to create a new empty one
+      setQrLoading(false);
+      stopPolling();
       fetchSessionStatus();
     } catch (e: any) {
       toast({ title: "Error deleting session", description: e.message, variant: "destructive" });
     }
   };
-
-  // Clean up when connected or unmounting
-  useEffect(() => {
-    const isConnected = sessionInfo?.state === "open" || sessionInfo?.state === "connected";
-    if (isConnected) {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    }
-  }, [sessionInfo?.state]);
-
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (eventSourceRef.current) eventSourceRef.current.close();
-    };
-  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -250,13 +183,18 @@ export default function VoiceAgentConnection() {
         return "bg-red-100 text-red-800";
       case "connecting":
       case "initializing":
+      case "qr":
         return "bg-yellow-100 text-yellow-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
 
-  const isConnected = sessionInfo?.state === "open" || sessionInfo?.state === "connected" || sessionInfo?.state === "paired";
+  const isConnected =
+    sessionInfo?.paired === true ||
+    sessionInfo?.state === "open" ||
+    sessionInfo?.state === "connected" ||
+    sessionInfo?.state === "paired";
 
   if (loading) {
     return (
@@ -271,9 +209,7 @@ export default function VoiceAgentConnection() {
       {!sessionInfo ? (
         <div className="text-center py-8">
           <Smartphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">
-            No Voice session available. Please contact support.
-          </p>
+          <p className="text-muted-foreground">No Voice session available. Please contact support.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -290,7 +226,11 @@ export default function VoiceAgentConnection() {
                   <p className="font-medium">Primary Voice Line</p>
                   <p className="text-sm text-muted-foreground">ID: {sessionInfo.id.substring(0, 8)}...</p>
                 </div>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sessionInfo.state)}`}>
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                    sessionInfo.state
+                  )}`}
+                >
                   {isConnected ? "Connected" : sessionInfo.state || "Unknown"}
                 </span>
               </div>
@@ -308,12 +248,8 @@ export default function VoiceAgentConnection() {
                     ) : (
                       <RefreshCw className="mr-2 h-4 w-4" />
                     )}
-                    <span className="hidden sm:inline">
-                      {qrCode ? "Regenerate QR" : "Get QR Code"}
-                    </span>
-                    <span className="sm:hidden">
-                      {qrCode ? "Regen" : "QR"}
-                    </span>
+                    <span className="hidden sm:inline">{qrCode ? "Regenerate QR" : "Get QR Code"}</span>
+                    <span className="sm:hidden">{qrCode ? "Regen" : "QR"}</span>
                   </Button>
                 )}
                 <Button
@@ -331,7 +267,7 @@ export default function VoiceAgentConnection() {
       )}
 
       {/* QR Code Display */}
-      {(!isConnected && qrCode) && (
+      {!isConnected && qrCode && (
         <div className="border rounded-lg p-6 text-center space-y-4">
           <h4 className="font-medium">Scan this QR Code with WhatsApp</h4>
           <div className="flex justify-center bg-white p-4 rounded-lg inline-block mx-auto">
@@ -339,14 +275,20 @@ export default function VoiceAgentConnection() {
           </div>
           <ol className="text-sm text-muted-foreground text-left max-w-sm mx-auto space-y-2 list-decimal list-inside">
             <li>Open WhatsApp on your phone</li>
-            <li>Go to <strong>Settings</strong></li>
-            <li>Tap <strong>Linked Devices</strong></li>
-            <li>Tap <strong>Link a Device</strong> and point your camera at this screen</li>
+            <li>
+              Go to <strong>Settings</strong>
+            </li>
+            <li>
+              Tap <strong>Linked Devices</strong>
+            </li>
+            <li>
+              Tap <strong>Link a Device</strong> and point your camera at this screen
+            </li>
           </ol>
         </div>
       )}
-      
-      {(!isConnected && qrLoading && !qrCode) && (
+
+      {!isConnected && qrLoading && !qrCode && (
         <div className="text-center py-12 border rounded-lg">
           <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
           <p className="font-medium">Connecting to Voice Server...</p>
